@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // Add this import
+import 'package:memories_map/data/models/memory.dart';
 import 'package:memories_map/data/repositories/memory_repository.dart';
 import 'package:memories_map/features/add_memory/presentation/add_details_screen.dart';
-import 'package:memories_map/features/add_memory/presentation/select_location_screen.dart'; // Add this import
+import 'package:memories_map/features/add_memory/presentation/select_location_screen.dart';
+import 'package:memories_map/features/map/presentation/widgets/memory_preview_card.dart'; // Add this import
+import 'package:memories_map/features/timeline/presentation/timeline_screen.dart';
 
 
 final memoriesStreamProvider = StreamProvider((ref) {
@@ -12,19 +15,8 @@ final memoriesStreamProvider = StreamProvider((ref) {
   return repo.watchAllMemories();
 });
 
-// Placeholder for the Timeline Screen we'll create later
-class TimelineScreen extends StatelessWidget {
-  const TimelineScreen({super.key});
+final selectedMemoryProvider = StateProvider<Memory?>((ref) => null);
 
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Text('Timeline Screen'),
-      ),
-    );
-  }
-}
 
 // This will be our main screen with the Bottom Navigation Bar
 class MainScreen extends StatefulWidget {
@@ -39,9 +31,10 @@ class _MainScreenState extends State<MainScreen> {
 
   // List of the main screens
   final List<Widget> _screens = [
-    const MapView(), // The actual map will go here
-    const TimelineScreen(),
+    const MapView(),
+    const TimelineScreen(), // This now refers to your new, real screen
   ];
+
 
   void _onTabTapped(int index) {
     setState(() {
@@ -77,54 +70,77 @@ class MapView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Watch the stream provider
     final memoriesAsyncValue = ref.watch(memoriesStreamProvider);
+    final selectedMemory = ref.watch(selectedMemoryProvider);
 
     return Scaffold(
-      body: FlutterMap(
-        options: MapOptions(
-          initialCenter: LatLng(13.0827, 80.2707),
-          initialZoom: 13.0,
-        ),
+      // We use a Stack to place the preview card on top of the map
+      body: Stack(
         children: [
-          TileLayer(
-            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'com.example.memories_map',
-          ),
-          // Use the 'when' method to handle loading/error/data states
-          memoriesAsyncValue.when(
-            loading: () => const SizedBox.shrink(), // Don't show anything while loading
-            error: (err, stack) => Center(child: Text('Error: $err')),
-            data: (memories) {
-              // Once data is loaded, build the MarkerLayer
-              final markers = memories.map((memory) {
-                // Ensure the location and its value are not null
-                if (memory.location.value?.latitude != null) {
-                  return Marker(
-                    width: 80.0,
-                    height: 80.0,
-                    point: LatLng(
-                      memory.location.value!.latitude,
-                      memory.location.value!.longitude,
-                    ),
-                    child: const Icon(
-                      Icons.location_pin,
-                      color: Colors.red,
-                      size: 40,
-                    ),
-                  );
-                }
-                return null; // Return null for memories without a location
-              }).whereType<Marker>().toList(); // Filter out any null markers
+          FlutterMap(
+            options: MapOptions(
+              initialCenter: const LatLng(13.0827, 80.2707),
+              initialZoom: 13.0,
+              // When the map is tapped, deselect any memory
+              onTap: (_, __) => ref.read(selectedMemoryProvider.notifier).state = null,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.memories_map',
+              ),
+              memoriesAsyncValue.when(
+                loading: () => const SizedBox.shrink(),
+                error: (err, stack) => Center(child: Text('Error: $err')),
+                data: (memories) {
+                  final markers = memories.map((memory) {
+                    if (memory.location.value?.latitude != null) {
+                      return Marker(
+                        width: 80.0,
+                        height: 80.0,
+                        point: LatLng(
+                          memory.location.value!.latitude,
+                          memory.location.value!.longitude,
+                        ),
+                        child: GestureDetector(
+                          onTap: () {
+                            // When a pin is tapped, update the selectedMemoryProvider
+                            ref.read(selectedMemoryProvider.notifier).state = memory;
+                          },
+                          child: const Icon(
+                            Icons.location_pin,
+                            color: Colors.red,
+                            size: 40,
+                          ),
+                        ),
+                      );
+                    }
+                    return null;
+                  }).whereType<Marker>().toList();
 
-              return MarkerLayer(markers: markers);
-            },
+                  return MarkerLayer(markers: markers);
+                },
+              ),
+            ],
           ),
+          // If a memory is selected, show the preview card at the bottom
+          if (selectedMemory != null)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: MemoryPreviewCard(
+                memory: selectedMemory,
+                onDismiss: () {
+                  // The close button on the card will deselect the memory
+                  ref.read(selectedMemoryProvider.notifier).state = null;
+                },
+              ),
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
-          // Navigate to the select location screen
           final LatLng? selectedLocation = await Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const SelectLocationScreen()),
@@ -132,10 +148,9 @@ class MapView extends ConsumerWidget {
 
           if (selectedLocation != null) {
             if (!context.mounted) return;
-            // Show the new screen as a modal bottom sheet
             showModalBottomSheet(
               context: context,
-              isScrollControlled: true, // Allows the sheet to be taller
+              isScrollControlled: true,
               builder: (ctx) => AddDetailsScreen(location: selectedLocation),
             );
           }

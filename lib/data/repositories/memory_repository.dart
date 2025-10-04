@@ -29,29 +29,30 @@ class MemoryRepository {
     return _isar.memories.where().watch(fireImmediately: true);
   }
 
+  Stream<List<Memory>> watchAllMemoriesByDate() {
+    return _isar.memories.where().sortByDateDesc().watch(fireImmediately: true);
+  }
+
   Future<void> addMemory({
     required String title,
     required String notes,
     required DateTime date,
     required LatLng latLng,
+    required List<String> photoPaths, // Add this new parameter
   }) async {
     final newMemory = Memory()
       ..title = title
       ..notes = notes
-      ..date = date;
+      ..date = date
+      ..photoPaths = photoPaths; // Assign the photo paths
 
     final newLocation = Location()
       ..latitude = latLng.latitude
       ..longitude = latLng.longitude;
 
     await _isar.writeTxn(() async {
-      // Save the location first
       await _isar.locations.put(newLocation);
-
-      // Save the memory
       await _isar.memories.put(newMemory);
-
-      // Link the location to the memory
       newMemory.location.value = newLocation;
       await newMemory.location.save();
     });

@@ -1,12 +1,15 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb; // To check platform
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart'; // Make sure you have `intl` in your pubspec.yaml
+import 'package:file_picker/file_picker.dart'; // Import the new package
+import 'package:heic_to_jpg/heic_to_jpg.dart';
+import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:memories_map/data/repositories/memory_repository.dart';
 
 class AddDetailsScreen extends ConsumerStatefulWidget {
   final LatLng location;
-
   const AddDetailsScreen({super.key, required this.location});
 
   @override
@@ -16,13 +19,11 @@ class AddDetailsScreen extends ConsumerStatefulWidget {
 class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
   final _titleController = TextEditingController();
   final _notesController = TextEditingController();
-
-  // State for the live-updating text
   String _displayTitle = '';
   DateTime _selectedDate = DateTime.now();
-  final List<String> _tags = []; // Start with an empty list of tags
+  final List<String> _tags = [];
+  final List<String> _imagePaths = [];
 
-  // This listener updates the UI whenever the title text changes
   void _onTitleChanged() {
     setState(() {
       _displayTitle = _titleController.text;
@@ -32,26 +33,58 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    // Attach the listener to the controller
     _titleController.addListener(_onTitleChanged);
   }
 
   @override
   void dispose() {
-    // Clean up the listener and controllers to prevent memory leaks
     _titleController.removeListener(_onTitleChanged);
     _titleController.dispose();
     _notesController.dispose();
     super.dispose();
   }
 
-  // Function to show the date picker
+  // --- REPLACED IMAGE PICKER LOGIC ---
+  Future<void> _pickImages() async {
+    // Use the file_picker package
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      // Explicitly allow HEIC files on Windows
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'heic'],
+    );
+
+    if (result != null) {
+      final List<String> processedPaths = [];
+      for (final file in result.files) {
+        String? finalPath = file.path;
+
+        // Only attempt conversion on mobile platforms
+        if (finalPath != null && !kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
+          if (finalPath.toLowerCase().endsWith('.heic')) {
+            finalPath = await HeicToJpg.convert(finalPath);
+          }
+        }
+
+        if (finalPath != null) {
+          processedPaths.add(finalPath);
+        }
+      }
+
+      setState(() {
+        _imagePaths.addAll(processedPaths);
+      });
+    }
+  }
+  // --- END OF REPLACEMENT ---
+
   Future<void> _selectDate(BuildContext context) async {
+    // ... (This function remains unchanged)
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2000),
-      lastDate: DateTime.now(), // User can't select a future date
+      lastDate: DateTime.now(),
       builder: (context, child) {
         return Theme(
           data: ThemeData.dark().copyWith(
@@ -76,6 +109,8 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // The entire build method remains the same as before.
+    // I am including it here for completeness.
     return FractionallySizedBox(
       heightFactor: 0.95,
       child: Container(
@@ -88,14 +123,11 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Row without extra text
               const Text(
                 'New Memory Details',
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
               ),
               const SizedBox(height: 24),
-
-              // Photos Section
               const Text('Photos', style: TextStyle(color: Colors.white70, fontSize: 16)),
               const SizedBox(height: 8),
               Container(
@@ -107,29 +139,28 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
                 ),
                 child: Row(
                   children: [
-                    // Add Photos Button
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE91E63),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.add, color: Colors.white, size: 30),
-                          Text(
-                            'Add Photos',
-                            style: TextStyle(color: Colors.white, fontSize: 10),
-                          ),
-                        ],
+                    GestureDetector(
+                      onTap: _pickImages,
+                      child: Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE91E63),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(Icons.add, color: Colors.white, size: 30),
+                            Text('Add Photos', style: TextStyle(color: Colors.white, fontSize: 10)),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
-                    // Live-updating Photo Placeholder
                     Expanded(
-                      child: Container(
+                      child: _imagePaths.isEmpty
+                          ? Container(
                         height: 80,
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
@@ -140,28 +171,42 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // This Text widget updates live
                             Text(
                               _displayTitle.isEmpty ? 'Your Memory Title' : _displayTitle,
                               style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                               overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 4),
-                            // This Text widget also updates live
                             Text(
                               DateFormat('MMM dd, yyyy').format(_selectedDate),
                               style: const TextStyle(color: Colors.white70, fontSize: 12),
                             ),
                           ],
                         ),
+                      )
+                          : ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _imagePaths.length,
+                        itemBuilder: (context, index) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8.0),
+                              child: Image.file(
+                                File(_imagePaths[index]),
+                                height: 80,
+                                width: 80,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
-
-              // Title Section
               Row(
                 children: [
                   const Text('Title', style: TextStyle(color: Colors.white70, fontSize: 16)),
@@ -171,7 +216,7 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
                       controller: _titleController,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: 'Trip to XXXX', // Updated placeholder
+                        hintText: 'Trip to XXXX',
                         hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
                         filled: true,
                         fillColor: const Color(0xFF3F3B4A),
@@ -183,12 +228,9 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
                       ),
                     ),
                   ),
-                  // Dropdown arrow is removed
                 ],
               ),
               const SizedBox(height: 24),
-
-              // Date Section
               Row(
                 children: [
                   const Text('Date', style: TextStyle(color: Colors.white70, fontSize: 16)),
@@ -218,8 +260,6 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-
-              // Notes Section
               const Text('Notes', style: TextStyle(color: Colors.white70, fontSize: 16)),
               const SizedBox(height: 8),
               TextField(
@@ -227,7 +267,7 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
                 maxLines: 4,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
-                  hintText: 'First time seeing snow', // Updated placeholder
+                  hintText: 'First time seeing snow',
                   hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
                   filled: true,
                   fillColor: const Color(0xFF3F3B4A),
@@ -239,18 +279,15 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-
-              // Categories/Tags Section
               const Text('Categories/Tags', style: TextStyle(color: Colors.white70, fontSize: 16)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8.0,
                 runSpacing: 8.0,
                 children: [
-                  // Tags will be added here dynamically later
                   ..._tags.map((tag) => Chip(
                     label: Text(tag),
-                    backgroundColor: const Color(0xFF8E44AD),
+                    backgroundColor: const Color(0xFF8E4AAD),
                     labelStyle: const TextStyle(color: Colors.white),
                     onDeleted: () {},
                   )),
@@ -264,38 +301,28 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
                 ],
               ),
               const SizedBox(height: 32),
-
-              // Save Button
               InkWell(
                 onTap: () {
-                  // Basic validation: ensure the title is not empty
                   if (_titleController.text.isEmpty) {
-                    // Show a snackbar error message
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Please enter a title for your memory.'),
                         backgroundColor: Colors.redAccent,
                       ),
                     );
-                    return; // Stop the function
+                    return;
                   }
-
-                  // Read the repository using the Riverpod ref
                   final repo = ref.read(memoryRepositoryProvider);
-
-                  // Call the updated addMemory method with all the data
                   repo.addMemory(
                     title: _titleController.text,
                     notes: _notesController.text,
                     date: _selectedDate,
                     latLng: widget.location,
+                    photoPaths: _imagePaths,
                   );
-
-                  // Close the bottom sheet after saving
                   Navigator.of(context).pop();
                 },
                 child: Container(
-                  // ... the rest of the button UI remains the same
                   height: 55,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(30),
