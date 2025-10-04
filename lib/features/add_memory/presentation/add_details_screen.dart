@@ -24,6 +24,7 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
   final List<String> _tags = [];
   final List<String> _imagePaths = [];
 
+
   void _onTitleChanged() {
     setState(() {
       _displayTitle = _titleController.text;
@@ -103,6 +104,46 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
     if (picked != null && picked != _selectedDate) {
       setState(() {
         _selectedDate = picked;
+      });
+    }
+  }
+
+  Future<void> _showAddTagDialog() async {
+    final tagController = TextEditingController();
+    final newTag = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF3F3B4A),
+        title: const Text('Add a New Tag', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: tagController,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: 'e.g., Beach, Family',
+            hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          TextButton(
+            child: const Text('Add'),
+            onPressed: () {
+              if (tagController.text.isNotEmpty) {
+                Navigator.of(context).pop(tagController.text);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+
+    if (newTag != null && newTag.isNotEmpty && !_tags.contains(newTag)) {
+      setState(() {
+        _tags.add(newTag);
       });
     }
   }
@@ -285,18 +326,26 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
                 spacing: 8.0,
                 runSpacing: 8.0,
                 children: [
+                  // This now builds chips dynamically from our state list
                   ..._tags.map((tag) => Chip(
                     label: Text(tag),
-                    backgroundColor: const Color(0xFF8E4AAD),
+                    backgroundColor: const Color(0xFF8E44AD),
                     labelStyle: const TextStyle(color: Colors.white),
-                    onDeleted: () {},
+                    onDeleted: () {
+                      // Allow deleting tags
+                      setState(() {
+                        _tags.remove(tag);
+                      });
+                    },
+                    deleteIcon: Icon(Icons.close, color: Colors.white.withOpacity(0.7), size: 18),
                   )),
+                  // The "Add New Tag" button now calls our dialog
                   ActionChip(
                     avatar: Icon(Icons.add, color: Colors.white.withOpacity(0.7)),
                     label: const Text('Add New Tag'),
                     backgroundColor: const Color(0xFF3F3B4A),
                     labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                    onPressed: () {},
+                    onPressed: _showAddTagDialog,
                   ),
                 ],
               ),
@@ -319,6 +368,7 @@ class _AddDetailsScreenState extends ConsumerState<AddDetailsScreen> {
                     date: _selectedDate,
                     latLng: widget.location,
                     photoPaths: _imagePaths,
+                    tags: _tags,
                   );
                   Navigator.of(context).pop();
                 },

@@ -98,6 +98,25 @@ class MemoryDetailsScreen extends StatelessWidget {
 
               const Divider(color: Colors.white24),
               const SizedBox(height: 16),
+              if (memory.tags.isNotEmpty) ...[
+                const Text(
+                  'Tags',
+                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8.0,
+                  runSpacing: 8.0,
+                  children: memory.tags.map((tag) => Chip(
+                    label: Text(tag.name),
+                    backgroundColor: const Color(0xFF8E44AD),
+                    labelStyle: const TextStyle(color: Colors.white),
+                  )).toList(),
+                ),
+                const SizedBox(height: 16),
+                const Divider(color: Colors.white24),
+                const SizedBox(height: 16),
+              ],
 
               // Display the Notes
               Text(

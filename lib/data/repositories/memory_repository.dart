@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:isar/isar.dart'; // Make sure this import is here
 import 'package:latlong2/latlong.dart';
 import 'package:memories_map/core/provider/database_provider.dart';
+import 'package:memories_map/data/models/tag.dart';
 
 import '../models/location.dart';
 import '../models/memory.dart';
@@ -39,6 +40,7 @@ class MemoryRepository {
     required DateTime date,
     required LatLng latLng,
     required List<String> photoPaths, // Add this new parameter
+    required List<String> tags,
   }) async {
     final newMemory = Memory()
       ..title = title
@@ -55,6 +57,22 @@ class MemoryRepository {
       await _isar.memories.put(newMemory);
       newMemory.location.value = newLocation;
       await newMemory.location.save();
+      for (final tagName in tags) {
+        // Check if a tag with this name already exists
+        Tag? existingTag = await _isar.tags.where().nameEqualTo(tagName).findFirst();
+
+        if (existingTag == null) {
+          // If it doesn't exist, create and save a new one
+          final newTag = Tag()..name = tagName;
+          await _isar.tags.put(newTag);
+          existingTag = newTag;
+        }
+
+        // Add the existing or new tag to the memory's tag list
+        newMemory.tags.add(existingTag);
+      }
+      // Save the links between the memory and the tags
+      await newMemory.tags.save();
     });
   }
 }

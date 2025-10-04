@@ -59,6 +59,7 @@ class TimelineMemoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasPhoto = memory.photoPaths.isNotEmpty;
+    final tags = memory.tags.toList();
 
     return GestureDetector(
       onTap: () {
@@ -114,23 +115,19 @@ class TimelineMemoryCard extends StatelessWidget {
                       DateFormat('MMM dd, yyyy').format(memory.date),
                       style: const TextStyle(color: Colors.white70, fontSize: 14),
                     ),
-                    // Placeholder for tags
                     const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      children: const [
-                        Chip(
-                          label: Text('Travel'),
+                    if (tags.isNotEmpty)
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: tags.map((tag) => Chip(
+                          label: Text(tag.name),
+                          backgroundColor: const Color(0xFF8E44AD),
+                          labelStyle: const TextStyle(color: Colors.white, fontSize: 10),
                           visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                        ),
-                        Chip(
-                          label: Text('Romantic'),
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                        ),
-                      ],
-                    )
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                        )).toList(),
+                      )
                   ],
                 ),
               ),
