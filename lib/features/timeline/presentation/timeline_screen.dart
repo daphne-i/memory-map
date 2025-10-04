@@ -2,14 +2,25 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:memories_map/core/provider/filter_providers.dart';
 import 'package:memories_map/data/models/memory.dart';
+import 'package:memories_map/data/models/tag.dart';
 import 'package:memories_map/data/repositories/memory_repository.dart';
 import 'package:memories_map/features/memory_details/presentation/memory_details_screen.dart';
 
-// Provider to fetch and watch the sorted list of memories
+// Provider to get a list of all unique tags available in the database
+final allTagsProvider = StreamProvider<List<Tag>>((ref) {
+  final repo = ref.watch(memoryRepositoryProvider);
+  return repo.watchAllTags();
+});
+
+// The single, correct timeline provider. It now watches the filter provider.
+// When the filter changes, this provider will automatically re-run.
 final timelineMemoriesProvider = StreamProvider<List<Memory>>((ref) {
   final repo = ref.watch(memoryRepositoryProvider);
-  return repo.watchAllMemoriesByDate();
+  final selectedTags = ref.watch(tagFilterProvider);
+  // It calls the new, correct method in the repository
+  return repo.watchFilteredMemoriesByDate(selectedTags);
 });
 
 class TimelineScreen extends ConsumerWidget {
@@ -25,33 +36,92 @@ class TimelineScreen extends ConsumerWidget {
         title: const Text('Timeline'),
         backgroundColor: const Color(0xFF2D273A),
       ),
-      body: memoriesAsyncValue.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
-        data: (memories) {
-          if (memories.isEmpty) {
-            return const Center(
-              child: Text(
-                'No memories yet.\nAdd one from the map screen!',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, fontSize: 18),
-              ),
-            );
-          }
-          return ListView.builder(
-            itemCount: memories.length,
-            itemBuilder: (context, index) {
-              final memory = memories[index];
-              return TimelineMemoryCard(memory: memory);
-            },
-          );
-        },
+      body: Column(
+        children: [
+          // The filter bar at the top
+          const FilterBar(),
+          Expanded(
+            child: memoriesAsyncValue.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, stack) => Center(child: Text('Error: $err')),
+              data: (memories) {
+                if (memories.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'No memories found.\nTry changing your filter or adding a new memory.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white70, fontSize: 18),
+                    ),
+                  );
+                }
+                return ListView.builder(
+                  itemCount: memories.length,
+                  itemBuilder: (context, index) {
+                    final memory = memories[index];
+                    return TimelineMemoryCard(memory: memory);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// A dedicated widget for displaying a single memory in the timeline
+// The widget for the horizontal list of filter tags
+class FilterBar extends ConsumerWidget {
+  const FilterBar({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final allTagsAsync = ref.watch(allTagsProvider);
+    final selectedTags = ref.watch(tagFilterProvider);
+
+    return allTagsAsync.when(
+      loading: () => const SizedBox(height: 50),
+      error: (e, st) => const SizedBox.shrink(),
+      data: (tags) {
+        if (tags.isEmpty) return const SizedBox.shrink();
+        return SizedBox(
+          height: 50,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: tags.length,
+            itemBuilder: (context, index) {
+              final tag = tags[index];
+              final isSelected = selectedTags.contains(tag.name);
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: FilterChip(
+                  label: Text(tag.name),
+                  selected: isSelected,
+                  onSelected: (bool selected) {
+                    final currentFilter = ref.read(tagFilterProvider.notifier);
+                    if (selected) {
+                      currentFilter.state = {...currentFilter.state, tag.name};
+                    } else {
+                      currentFilter.state = {...currentFilter.state}..remove(tag.name);
+                    }
+                  },
+                  backgroundColor: const Color(0xFF3F3B4A),
+                  selectedColor: const Color(0xFFE91E63),
+                  labelStyle: const TextStyle(color: Colors.white),
+                  checkmarkColor: Colors.white,
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+// The widget for displaying a single memory in the timeline
 class TimelineMemoryCard extends StatelessWidget {
   final Memory memory;
   const TimelineMemoryCard({super.key, required this.memory});
@@ -78,7 +148,6 @@ class TimelineMemoryCard extends StatelessWidget {
           padding: const EdgeInsets.all(12.0),
           child: Row(
             children: [
-              // Thumbnail Photo
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: SizedBox(
@@ -96,7 +165,6 @@ class TimelineMemoryCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              // Memory Details
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

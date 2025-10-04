@@ -5,6 +5,8 @@ import 'package:memories_map/data/models/memory.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+
+
 class MemoryDetailsScreen extends StatelessWidget {
   final Memory memory;
   const MemoryDetailsScreen({super.key, required this.memory});
